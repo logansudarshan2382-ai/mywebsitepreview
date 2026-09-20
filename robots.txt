@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://fungames-arcade.netlify.app/sitemap.xml
