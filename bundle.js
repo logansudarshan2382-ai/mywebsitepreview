@@ -50,8 +50,10 @@ function NS_levelConfig(n){
   let length=[2500,3300,4200,5200,6300][tier]+within*260;
   let shipEnabled=tier>=1;
   let bpm=[120,132,142,152,162][tier]+within*3;
+  let easeDensity=0;
+  if(n>=7&&n<=11){baseSpeed*=.9,stay=Math.min(.7,stay+.08),gap=Math.max(.02,gap-.05),easeDensity=-.06}
   let star2=Math.round(length*.085),star3=Math.round(length*.15);
-  return{n,tier,tierName:NS_TIER_NAMES[tier],tierColor:NS_TIER_COLORS[tier],baseSpeed,stay:Math.max(.1,stay),gap:Math.min(.42,gap),length,shipEnabled,star2,star3,bpm};
+  return{n,tier,tierName:NS_TIER_NAMES[tier],tierColor:NS_TIER_COLORS[tier],baseSpeed,stay:Math.max(.1,stay),gap:Math.min(.42,gap),length,shipEnabled,star2,star3,bpm,easeDensity};
 }
 function NS_rng(seed){let s=seed>>>0||1;return function(){s=s+1831565813|0;let t=Math.imul(s^s>>>15,1|s);return t=t+Math.imul(t^t>>>7,61|t)^t,((t^t>>>14)>>>0)/4294967296}}function NS_levelSeed(n){return n*7919+104729}function NS_progressLoad(){
   try{let p=JSON.parse(localStorage.getItem("ns_progress")||"null");if(p&&typeof p==="object")return{unlocked:p.unlocked||1,stars:p.stars||{},best:p.best||{},infinityBest:p.infinityBest||0}}catch(e){}
@@ -84,7 +86,7 @@ function NS_populateSegment(st,seg,cfg){
   let pad=22,usableW=seg.w-pad*2;
   if(usableW<18)return;
   let frac=Math.min(1,st.genDistance/cfg.length);
-  let roll=st.rng(),density=.24+cfg.tier*.05+frac*.06;
+  let roll=st.rng(),density=.24+cfg.tier*.05+frac*.06+(cfg.easeDensity||0);
   if(roll<density){
     let isBlock=cfg.tier>=1&&st.rng()<.35;
     let w=isBlock?32:24,h=isBlock?28+Math.min(16,cfg.tier*3.5):32+Math.min(20,cfg.tier*4);
@@ -95,19 +97,20 @@ function NS_populateSegment(st,seg,cfg){
     st.pads.push({x,w,gY:seg.y,used:!1});
   }
 }
-function NS_state(seed){let rng=NS_rng(seed||1),rngFx=NS_rng(((seed||1)*2654435761>>>0)||2);return{rng,rngFx,lastPickupDist:0,mode:"cube",terrain:[{x:-40,w:NS_W+100,y:NS_TIERS[0],landed:!0}],lastTerrainEnd:NS_W+60,lastTerrainY:NS_TIERS[0],genDistance:0,terrainDone:!1,finish:null,obstacles:[],pads:[],portals:[],walls:[],pickups:[],particles:[],rings:[],stars:Array.from({length:34},()=>({x:rng()*NS_W,y:rng()*NS_H*.72,r:rng()*1.3+.3,tw:rng()*6.28})),elapsed:0,lastPortal:6,lastWall:-1,lastPickup:.4,flash:0,flashColor:"248,113,113",shake:0,lastTime:0,playerY:NS_TIERS[0],vy:0,jumps:2,grounded:!0,scrollX:0,shipUntil:0,holding:!1,transitionT:0,invulnT:0,trailT:0,finished:!1}}
-function NS_music(bpmFn,leadArr,bassArr){
-  let lead=leadArr||[220,0,261.63,293.66,329.63,0,293.66,261.63,220,0,220,261.63,293.66,0,329.63,392,440,0,392,329.63,293.66,0,261.63,293.66,220,261.63,0,329.63,293.66,261.63,220,0];
-  let bass=bassArr||[55,0,55,82.41,55,0,73.42,0];
+function NS_state(seed){let sd=seed||1,rng=NS_rng(sd),rngPickup=NS_rng((sd*2654435761>>>0)||2),rngEvent=NS_rng((sd*40503>>>0)||3);return{rng,rngPickup,rngEvent,lastPickupDist:0,mode:"cube",terrain:[{x:-40,w:NS_W+100,y:NS_TIERS[0],landed:!0}],lastTerrainEnd:NS_W+60,lastTerrainY:NS_TIERS[0],genDistance:0,terrainDone:!1,finish:null,obstacles:[],pads:[],portals:[],walls:[],pickups:[],particles:[],rings:[],stars:Array.from({length:34},()=>({x:rng()*NS_W,y:rng()*NS_H*.72,r:rng()*1.3+.3,tw:rng()*6.28})),elapsed:0,lastPortal:6,lastWall:-1,lastPickup:.4,flash:0,flashColor:"248,113,113",shake:0,lastTime:0,playerY:NS_TIERS[0],vy:0,jumps:2,grounded:!0,scrollX:0,shipUntil:0,holding:!1,transitionT:0,invulnT:0,trailT:0,finished:!1}}
+function NS_music(bpmFn,leadArr,bassArr,opts){
+  opts=opts||{};
+  let lead=leadArr,bass=bassArr;
+  let leadT=opts.leadT||"sawtooth",bassT=opts.bassT||"sawtooth",leadDur=opts.leadDur!==undefined?opts.leadDur:.2,bassDur=opts.bassDur!==undefined?opts.bassDur:.32,detune=opts.detune!==undefined?opts.detune:1.006,detuneT=opts.detuneT||(leadT==="square"?"sawtooth":"square"),kickEvery=opts.kickEvery||4,hatEvery=opts.hatEvery||2,hatOffset=opts.hatOffset!==undefined?opts.hatOffset:1,leadGain=opts.leadGain!==undefined?opts.leadGain:.075,bassGain=opts.bassGain!==undefined?opts.bassGain:.095;
   let st={timer:null,step:0,playing:!1};
   function tick(){
     if(!st.playing)return;
     let ln=lead[st.step%lead.length];
-    ln>0&&(D(ln,.2,"sawtooth",.075),D(ln*1.006,.2,"square",.03));
+    ln>0&&(D(ln,leadDur,leadT,leadGain),detune&&D(ln*detune,leadDur,detuneT,leadGain*.4));
     let bn=bass[st.step%bass.length];
-    bn>0&&D(bn,.32,"sawtooth",.095);
-    st.step%4===0&&D(78,.055,"sine",.17);
-    st.step%2===1&&D(3600,.016,"square",.018);
+    bn>0&&D(bn,bassDur,bassT,bassGain);
+    kickEvery>0&&st.step%kickEvery===0&&D(78,.055,"sine",.17);
+    hatEvery>0&&st.step%hatEvery===hatOffset&&D(3600,.016,"square",.018);
     st.step++;
     let d=6e4/Math.max(40,bpmFn())/2;
     st.timer=setTimeout(tick,d);
@@ -143,22 +146,31 @@ function NS_trackMusic(key,b64,gain){
     }
   };
 }
-var NS_MELODIES={
-  medium:{lead:[261.63,0,329.63,392,0,349.23,329.63,0,261.63,0,293.66,329.63,0,392,440,0,392,0,349.23,329.63,0,293.66,261.63,0,329.63,392,0,440,392,349.23,329.63,0],bass:[65.41,0,65.41,98,65.41,0,87.31,0]},
-  ultra:{lead:[246.94,0,293.66,246.94,0,207.65,246.94,0,246.94,0,220,246.94,0,277.18,311.13,0,277.18,0,246.94,220,0,207.65,246.94,0,246.94,277.18,0,311.13,277.18,246.94,220,0],bass:[61.74,0,61.74,92.5,61.74,0,82.41,0]},
-  expert:{lead:[329.63,0,440,329.63,0,523.25,440,0,329.63,0,392,440,0,523.25,587.33,0,523.25,0,440,392,0,329.63,440,0,523.25,440,0,392,329.63,293.66,261.63,0],bass:[82.41,0,82.41,123.47,82.41,0,110,0]},
-  infinity:{lead:[220,0,246.94,220,0,261.63,246.94,0,220,0,196,220,0,246.94,277.18,0,246.94,0,220,196,0,220,246.94,0,220,261.63,0,246.94,220,196,220,0],bass:[55,0,55,73.42,55,0,65.41,0]}
+var NS_TRACKS={
+  2:{lead:[329.64,0,415.3,493.88,0,415.3,369.98,0,493.88,0,659.26,0,622.24,493.88,0,415.3,0,554.36,0,0,659.26,0,554.36,0,329.64,369.98,415.3,0,493.88,415.3,369.98,329.64],bass:[82.42,0,0,82.42,0,123.48,0,92.5],o:{leadT:"square",bassT:"triangle",leadDur:.12,bassDur:.24,detune:1.004,kickEvery:4,hatEvery:2,hatOffset:1},bpm:-4},
+  3:{lead:[0,220,0,0,246.94,277.18,0,246.94,0,0,220,0,196,220,0,0,220,246.94,277.18,293.66,329.63,369.99,392,0,0,220,0,246.94,277.18,0,220,0],bass:[110,0,110,0,98,0,110,123.47],o:{leadT:"triangle",bassT:"sine",leadDur:.2,bassDur:.28,detune:1.005,kickEvery:4,hatEvery:3,hatOffset:2},bpm:2},
+  4:{lead:[293.66,349.23,392,440,392,349.23,293.66,261.63,293.66,349.23,392,349.23,293.66,246.94,293.66,349.23,392,440,493.88,440,392,349.23,293.66,0],bass:[73.42,0,87.31,0,98,0,87.31,0],o:{leadT:"sawtooth",bassT:"sawtooth",leadDur:.34,bassDur:.34,detune:1.004,kickEvery:4,hatEvery:2,hatOffset:1},bpm:-6},
+  5:{lead:[233.08,0,293.66,349.23,0,466.16,0,349.23,261.63,0,311.13,392,0,523.25,0,392],bass:[58.27,0,58.27,0,87.31,0,65.41,0],o:{leadT:"square",bassT:"sawtooth",leadDur:.18,bassDur:.3,detune:0,kickEvery:4,hatEvery:2,hatOffset:1},bpm:6},
+  6:{lead:[493.88,587.33,659.25,0,0,0,123.47,146.83,164.81,0,0,0,493.88,659.25,739.99,0,0,0,146.83,123.47,164.81,0,0,0],bass:[61.74,0,61.74,0,82.41,0,61.74,0],o:{leadT:"triangle",bassT:"triangle",leadDur:.24,bassDur:.34,detune:1.002,kickEvery:6,hatEvery:2,hatOffset:0},bpm:-2},
+  7:{lead:[174.61,185,0,207.65,174.61,0,155.56,174.61,0,207.65,233.08,0,207.65,174.61,0,185,174.61,0,207.65,233.08,277.18,233.08,207.65,0],bass:[87.31,0,87.31,92.5,87.31,0,77.78,0],o:{leadT:"sawtooth",bassT:"sawtooth",leadDur:.16,bassDur:.26,detune:1.008,kickEvery:3,hatEvery:2,hatOffset:1},bpm:0},
+  9:{lead:[246.94,0,277.18,293.66,0,369.99,349.23,0,293.66,277.18,0,246.94,233.08,0,277.18,246.94,0,369.99,349.23,0,293.66,0,246.94,0],bass:[123.47,0,123.47,0,110,0,116.54,0],o:{leadT:"square",bassT:"sawtooth",leadDur:.2,bassDur:.3,detune:1.005,kickEvery:4,hatEvery:2,hatOffset:1},bpm:8},
+  10:{lead:[277.18,0,0,0,329.63,0,0,0,207.65,0,0,0,349.23,0,0,0],bass:[69.3,0,0,82.41,0,0,52.5,0],o:{leadT:"sawtooth",bassT:"square",leadDur:.3,bassDur:.4,detune:1.02,kickEvery:2,hatEvery:2,hatOffset:1},bpm:-8},
+  11:{lead:[587.33,493.88,415.3,392,349.23,293.66,246.94,196,587.33,493.88,415.3,392,349.23,293.66,246.94,0],bass:[98,0,73.42,0,98,0,73.42,0],o:{leadT:"square",bassT:"sawtooth",leadDur:.14,bassDur:.26,detune:0,kickEvery:4,hatEvery:2,hatOffset:1},bpm:4},
+  12:{lead:[293.66,0,466.16,0,207.65,0,369.99,0,329.63,0,523.25,0,233.08,0,415.3,0],bass:[73.42,0,65.41,0,58.27,0,51.91,0],o:{leadT:"triangle",bassT:"sine",leadDur:.3,bassDur:.36,detune:1.01,kickEvery:4,hatEvery:2,hatOffset:1},bpm:-4},
+  13:{lead:[329.63,311.13,0,415.3,440,0,415.3,311.13,0,329.63,392,0,415.3,0,311.13,329.63,0,415.3,440,466.16,440,415.3,0,329.63],bass:[82.41,0,82.41,0,98,0,82.41,0],o:{leadT:"sawtooth",bassT:"sawtooth",leadDur:.14,bassDur:.24,detune:1.01,kickEvery:2,hatEvery:2,hatOffset:1},bpm:4},
+  14:{lead:[349.23,415.3,349.23,0,392,466.16,392,0,329.63,392,329.63,0,369.99,440,369.99,0,415.3,349.23],bass:[87.31,0,98,0,82.41,0,92.5,0],o:{leadT:"square",bassT:"square",leadDur:.11,bassDur:.2,detune:0,kickEvery:2,hatEvery:2,hatOffset:0},bpm:10},
+  15:{lead:[164.81,0,739.99,0,185,0,987.77,0,196,0,659.25,0,164.81,0,783.99,987.77,0,739.99,0,523.25,0,392,0,329.63],bass:[82.41,0,0,92.5,0,82.41,0,98],o:{leadT:"sawtooth",bassT:"sawtooth",leadDur:.12,bassDur:.22,detune:1.012,kickEvery:2,hatEvery:2,hatOffset:1},bpm:14},
+  infinity:{lead:[261.63,261.63,293.66,261.63,246.94,246.94,277.18,246.94,220,220,246.94,220,207.65,207.65,233.08,207.65],bass:[65.41,0,65.41,0,65.41,0,65.41,0],o:{leadT:"square",bassT:"sawtooth",leadDur:.15,bassDur:.28,detune:1.004,kickEvery:2,hatEvery:2,hatOffset:1},bpm:0}
 };
 function NS_infinityConfig(dist){
-  return{n:"infinity",tier:Math.min(4,Math.floor(dist/3200)),tierName:"INFINITY",tierColor:"#fbbf24",baseSpeed:Math.min(620,215+dist*.018),stay:Math.max(.08,.68-dist*.00022),gap:Math.min(.44,.04+dist*.00009),length:1/0,shipEnabled:!0,bpm:Math.min(176,118+dist*.006),star2:0,star3:0};
+  return{n:"infinity",tier:Math.min(4,Math.floor(dist/2800)),tierName:"INFINITY",tierColor:"#fbbf24",baseSpeed:300,stay:Math.max(.06,.52-dist*.0002),gap:Math.min(.48,.09+dist*.00011),length:1/0,shipEnabled:!0,bpm:Math.min(180,132+dist*.008),star2:0,star3:0};
 }
 function NS_musicFor(sel,srRef){
-  if(sel==="infinity")return NS_music(()=>118+Math.min(58,(srRef.current.scrollX||0)/220),NS_MELODIES.infinity.lead,NS_MELODIES.infinity.bass);
-  if(sel<=3)return NS_trackMusic("funky",NS_FUNKY_B64,.16);
-  if(sel<=6){let cfg=NS_levelConfig(sel);return NS_music(()=>cfg.bpm+Math.min(20,(srRef.current.scrollX||0)/400),NS_MELODIES.medium.lead,NS_MELODIES.medium.bass)}
-  if(sel<=9)return NS_trackMusic("vr",VR_MUSIC_B64,.14);
-  if(sel<=12){let cfg=NS_levelConfig(sel);return NS_music(()=>cfg.bpm+Math.min(20,(srRef.current.scrollX||0)/400),NS_MELODIES.ultra.lead,NS_MELODIES.ultra.bass)}
-  let cfg=NS_levelConfig(sel);return NS_music(()=>cfg.bpm+Math.min(20,(srRef.current.scrollX||0)/400),NS_MELODIES.expert.lead,NS_MELODIES.expert.bass);
+  if(sel==="infinity"){let t=NS_TRACKS.infinity;return NS_music(()=>130+Math.min(48,(srRef.current.scrollX||0)/260),t.lead,t.bass,t.o)}
+  if(sel===1)return NS_trackMusic("funky",NS_FUNKY_B64,.16);
+  if(sel===8)return NS_trackMusic("vr",VR_MUSIC_B64,.14);
+  let cfg=NS_levelConfig(sel),t=NS_TRACKS[sel];
+  return NS_music(()=>cfg.bpm+t.bpm+Math.min(16,(srRef.current.scrollX||0)/450),t.lead,t.bass,t.o);
 }
 function NS_draw(ctx,st,dt,lvNum,combo,shield){
   st.flash=Math.max(0,st.flash-dt*1.6),st.shake=Math.max(0,st.shake-dt*3.2),st.transitionT=Math.max(0,st.transitionT-dt);
@@ -401,7 +413,7 @@ function NeonSurgeGame({config:t,launchNumber:a,onExit:r}){
   },[lives]);
   (0,m.useEffect)(()=>{let iv=setInterval(()=>setEl(e=>e+1),1e3);return()=>clearInterval(iv)},[]);
   function showPop(x){setPop(x),pt.current&&clearTimeout(pt.current),pt.current=setTimeout(()=>setPop(null),700)}
-  function resetRun(){sr.current=NS_state(selectedLevel==="infinity"?Math.floor(Math.random()*1e9)+1:NS_levelSeed(selectedLevel)),setScore(0),setLives(1),setShield(0),setCombo(0),setMode("cube"),setGo(!1),setLevelComplete(!1),setStarsEarned(0)}
+  function resetRun(){sr.current=NS_state(selectedLevel==="infinity"?Math.floor(Math.random()*1e9)+1:NS_levelSeed(selectedLevel)),selectedLevel===6&&sr.current.pickups.push({x:NS_W+70,y:280,type:"shield",taken:!1,seed:3}),setScore(0),setLives(1),setShield(0),setCombo(0),setMode("cube"),setGo(!1),setLevelComplete(!1),setStarsEarned(0)}
   function selectLevel(n){setSelectedLevel(n)}
   function finishLevel(){
     let st=sr.current;
@@ -478,7 +490,7 @@ function NeonSurgeGame({config:t,launchNumber:a,onExit:r}){
           if(st.playerY>NS_SHIP_BOTTOM-NS_R){st.playerY=NS_SHIP_BOTTOM-NS_R,st.vy=Math.min(0,st.vy*.3)}
           if(st.elapsed-st.lastWall>Math.max(.85,1.4-cfg.tier*.12)){
             st.lastWall=st.elapsed;
-            let gapH=Math.max(95,145-cfg.tier*10),range=NS_SHIP_BOTTOM-NS_SHIP_TOP-gapH,gapY=NS_SHIP_TOP+20+st.rngFx()*Math.max(10,range-40);
+            let gapH=Math.max(95,145-cfg.tier*10),range=NS_SHIP_BOTTOM-NS_SHIP_TOP-gapH,gapY=NS_SHIP_TOP+20+st.rngEvent()*Math.max(10,range-40);
             st.walls.push({x:NS_W+20,w:30,gapY,gapH,resolved:!1});
           }
           for(let w of st.walls){
@@ -546,7 +558,7 @@ function NeonSurgeGame({config:t,launchNumber:a,onExit:r}){
           }
           st.pads=st.pads.filter(pd=>pd.x>-60);
         }
-        if(cfg.shipEnabled&&st.mode==="cube"&&!st.terrainDone&&st.elapsed-st.lastPortal>13+st.rngFx()*6){
+        if(cfg.shipEnabled&&st.mode==="cube"&&!st.terrainDone&&st.elapsed-st.lastPortal>13+st.rngEvent()*6){
           st.lastPortal=st.elapsed,st.portals.push({x:NS_W+30,w:16,kind:"ship",resolved:!1});
         }
         for(let po of st.portals){
@@ -566,11 +578,11 @@ function NeonSurgeGame({config:t,launchNumber:a,onExit:r}){
           st.playerY=NS_TIERS[0],st.vy=0,st.jumps=2,st.grounded=!0;
           at.levelUp(),showPop("CUBE MODE!");
         }
-        if(st.scrollX-st.lastPickupDist>260+st.rngFx()*220){
+        if(st.scrollX-st.lastPickupDist>260+st.rngPickup()*220){
           st.lastPickupDist=st.scrollX;
-          if(st.rngFx()<.8){
-            let isShield=st.rngFx()<.12,y=190+st.rngFx()*190;
-            st.pickups.push({x:NS_W+40+st.rngFx()*40,y,type:isShield?"shield":"orb",taken:!1,seed:st.rngFx()*10});
+          if(st.rngPickup()<.8){
+            let isShield=st.rngPickup()<.12,y=190+st.rngPickup()*190;
+            st.pickups.push({x:NS_W+40+st.rngPickup()*40,y,type:isShield?"shield":"orb",taken:!1,seed:st.rngPickup()*10});
           }
         }
         for(let p of st.pickups){
