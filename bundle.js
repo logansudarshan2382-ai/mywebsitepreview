@@ -51,8 +51,9 @@ function NS_levelConfig(n){
   let shipEnabled=tier>=1;
   let bpm=[120,132,142,152,162][tier]+within*3;
   let easeDensity=0;
-  if(n>=7&&n<=11){baseSpeed*=.9,stay=Math.min(.7,stay+.08),gap=Math.max(.02,gap-.05),easeDensity=-.06}
-  let star2=Math.round(length*.085),star3=Math.round(length*.15);
+  if(n>=7&&n<=11){baseSpeed*=.95,stay=Math.min(.7,stay+.04),gap=Math.max(.02,gap-.025),easeDensity=-.03}
+  let star2Mult=[.055,.06,.065,.09,.11][tier],star3Mult=[.1,.105,.11,.16,.2][tier];
+  let star2=Math.round(length*star2Mult),star3=Math.round(length*star3Mult);
   return{n,tier,tierName:NS_TIER_NAMES[tier],tierColor:NS_TIER_COLORS[tier],baseSpeed,stay:Math.max(.1,stay),gap:Math.min(.42,gap),length,shipEnabled,star2,star3,bpm,easeDensity};
 }
 function NS_rng(seed){let s=seed>>>0||1;return function(){s=s+1831565813|0;let t=Math.imul(s^s>>>15,1|s);return t=t+Math.imul(t^t>>>7,61|t)^t,((t^t>>>14)>>>0)/4294967296}}function NS_levelSeed(n){return n*7919+104729}function NS_progressLoad(){
@@ -63,16 +64,21 @@ function NS_progressSave(p){try{localStorage.setItem("ns_progress",JSON.stringif
 function NS_speed(st,cfg){let frac=Math.min(1,st.scrollX/cfg.length);return Math.min(cfg.baseSpeed+80,cfg.baseSpeed+frac*70)}
 function NS_segAt(st,x){for(let s of st.terrain)if(x>=s.x&&x<s.x+s.w)return s;return null}
 function NS_nextTerrain(st,cfg){
+  st.segCount=(st.segCount||0)+1;
+  let safe=st.segCount<=3;
   let frac=Math.min(1,st.genDistance/cfg.length);
   let stayChance=Math.max(.12,cfg.stay-frac*.15);
   let curIdx=NS_TIERS.indexOf(st.lastTerrainY);curIdx<0&&(curIdx=0);
-  let rt=st.rng(),dir=0;
-  if(curIdx===0)dir=rt<stayChance?0:1;
-  else if(curIdx===NS_TIERS.length-1)dir=rt<stayChance?0:-1;
-  else dir=rt<stayChance*.55?0:(rt<stayChance*.55+.35?1:-1);
+  let dir=0;
+  if(!safe){
+    let rt=st.rng();
+    if(curIdx===0)dir=rt<stayChance?0:1;
+    else if(curIdx===NS_TIERS.length-1)dir=rt<stayChance?0:-1;
+    else dir=rt<stayChance*.55?0:(rt<stayChance*.55+.35?1:-1);
+  }
   let nextIdx=Math.max(0,Math.min(NS_TIERS.length-1,curIdx+dir));
-  let nextY=NS_TIERS[nextIdx];
-  let gapChance=Math.min(.42,cfg.gap+frac*.08);
+  let nextY=safe?NS_TIERS[0]:NS_TIERS[nextIdx];
+  let gapChance=safe?0:Math.min(.42,cfg.gap+frac*.08);
   let hasGap=st.rng()<gapChance;
   let gapW=hasGap?30+st.rng()*32:0;
   let segW=Math.max(78,150-cfg.tier*10)+st.rng()*70;
@@ -82,19 +88,25 @@ function NS_nextTerrain(st,cfg){
   return seg;
 }
 function NS_populateSegment(st,seg,cfg){
-  if(seg.w<72)return;
+  if(st.segCount<=3){st.sinceHazard=0;return}
+  if((st.sinceHazard||0)<1){st.sinceHazard=(st.sinceHazard||0)+1;return}
+  if(seg.w<72){st.sinceHazard=(st.sinceHazard||0)+1;return}
   let pad=22,usableW=seg.w-pad*2;
-  if(usableW<18)return;
+  if(usableW<18){st.sinceHazard=(st.sinceHazard||0)+1;return}
   let frac=Math.min(1,st.genDistance/cfg.length);
-  let roll=st.rng(),density=.24+cfg.tier*.05+frac*.06+(cfg.easeDensity||0);
+  let roll=st.rng(),density=.28+cfg.tier*.055+frac*.07+(cfg.easeDensity||0);
   if(roll<density){
     let isBlock=cfg.tier>=1&&st.rng()<.35;
     let w=isBlock?32:24,h=isBlock?28+Math.min(16,cfg.tier*3.5):32+Math.min(20,cfg.tier*4);
     let x=seg.x+pad+st.rng()*Math.max(0,usableW-w);
     st.obstacles.push({x,w,h,gY:seg.y,type:isBlock?"block":"spike",resolved:!1,passed:!1,minGap:999});
+    st.sinceHazard=0;
   }else if(roll<density+.1){
     let w=32,x=seg.x+pad+st.rng()*Math.max(0,usableW-w);
     st.pads.push({x,w,gY:seg.y,used:!1});
+    st.sinceHazard=0;
+  }else{
+    st.sinceHazard=(st.sinceHazard||0)+1;
   }
 }
 function NS_state(seed){let sd=seed||1,rng=NS_rng(sd),rngPickup=NS_rng((sd*2654435761>>>0)||2),rngEvent=NS_rng((sd*40503>>>0)||3);return{rng,rngPickup,rngEvent,lastPickupDist:0,mode:"cube",terrain:[{x:-40,w:NS_W+100,y:NS_TIERS[0],landed:!0}],lastTerrainEnd:NS_W+60,lastTerrainY:NS_TIERS[0],genDistance:0,terrainDone:!1,finish:null,obstacles:[],pads:[],portals:[],walls:[],pickups:[],particles:[],rings:[],stars:Array.from({length:34},()=>({x:rng()*NS_W,y:rng()*NS_H*.72,r:rng()*1.3+.3,tw:rng()*6.28})),elapsed:0,lastPortal:6,lastWall:-1,lastPickup:.4,flash:0,flashColor:"248,113,113",shake:0,lastTime:0,playerY:NS_TIERS[0],vy:0,jumps:2,grounded:!0,scrollX:0,shipUntil:0,holding:!1,transitionT:0,invulnT:0,trailT:0,finished:!1}}
